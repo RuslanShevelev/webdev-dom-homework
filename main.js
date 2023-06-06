@@ -1,67 +1,90 @@
 "use strict";
-// Код писать здесь
+import { getAPI, postApi, deleteComment, toggleLike, commentCorrection, loginUser } from "./api.js";
+import renderMain from "./render.js";
+import { renderLoginComponent } from "./components/login-component.js";
+
+let user = "";
+let token = "";
 let messages = [];
-const listElement = document.getElementById("list");
-const addFormElement = document.getElementById("addForm");
-const loadingElement = document.querySelector(".loading");
-import { getAPI } from "./api.js";
-import renderMessages from "./render.js";
+
+let appElement = document.getElementById("app");
+
+const updateUser = () => {
+  if (localStorage.user === undefined) {
+    return
+  }
+  else {
+    user = JSON.parse(localStorage.user);
+    token = `Bearer ${user.token}`;
+  };
+};
 
 const getCommentDataMain = (comment) => {
   return {
+    userId: comment.author.id,
+    login: comment.author.login,
     name: comment.author.name,
     time: getCurrentDate(new Date(comment.date)),
     comment: comment.text,
+    commentID: comment.id,
     likesCount: comment.likes,
     liked: comment.isLiked,
     isEdit: false,
-    isLoading: false
+    isLoading: false,
   };
 };
-const renderMainList = () => {
-  renderMessages(messages, getCommentListMain, listElement);
-  initLikeButtonsListeners();
-  initCorrectButtonsListeners();
-  initAnswersListeners();
-}
+
+const renderMainList = (messages) => {
+  renderMain(messages, appElement, token, user);
+  if (token) {
+    const nameInputElement = document.getElementById("name-input");
+    nameInputElement.value = user.name;
+    nameInputElement.setAttribute('disabled', '');
+    const commentInputElement = document.getElementById("comment-input");
+    initLikeButtonsListeners();
+    initCorrectButtonsListeners();
+    initAnswersListeners(commentInputElement);
+    initDeleteButton(getCommentDataMain);
+    initInputs(commentInputElement);
+    document.getElementById('exit').addEventListener('click', () => {
+      localStorage.clear();
+      user = "";
+      token = "";
+      fetchAndRenderMessages();
+    });
+  }
+  else {
+    document.getElementById('login-link').addEventListener('click', () => {
+      renderLoginComponent(appElement, fetchAndRenderMessages);
+    });
+  };
+};
 
 const fetchAndRenderMessages = () => {
-  getAPI(getCommentDataMain).then((result) => {
+  updateUser();
+  return getAPI(token, getCommentDataMain).then((result) => {
     messages = result;
-    renderMainList();
-  }).then(() => {
-    const loadingTitleElement = document.querySelector(".loading-title");
-    loadingTitleElement.style.display = 'none';
-  });
+    renderMainList(messages, token, user);
+  })
 };
 fetchAndRenderMessages();
 
-function delay(interval = 300) {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve();
-    }, interval);
-  });
-};
 const initLikeButtonsListeners = () => {
   const likeButtonsElements = document.querySelectorAll(".like-button");
   for (const likeButtonElement of likeButtonsElements) {
     likeButtonElement.addEventListener("click", (event) => {
       event.stopPropagation();
       likeButtonElement.classList.add('-loading-like');
-      const index = likeButtonElement.dataset.index;
-      messages[index].liked = !messages[index].liked;
-      if (messages[index].liked) {
-        messages[index].likesCount += 1;
-      }
-      else {
-        messages[index].likesCount -= 1;
-      }
-      delay(2000).then(renderMainList);
+      const id = likeButtonElement.dataset.id;
+      toggleLike({
+        id,
+        token,
+      }).then(() => {
+        fetchAndRenderMessages();
+      })
     })
   };
 };
-
 const initCorrectButtonsListeners = () => {
   const correctButtonsElements = document.querySelectorAll(".correct-button");
   const correctedComments = document.querySelectorAll('.comment-correction');
@@ -75,88 +98,65 @@ const initCorrectButtonsListeners = () => {
       event.stopPropagation();
       const index = correctButtonElement.dataset.index;
       if (messages[index].isEdit) {
-        const correctionText = document.querySelector('.comment-correction')
-        messages[index].comment = correctionText.value
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;");
-        messages[index].isEdit = !messages[index].isEdit;
+        const id = correctButtonElement.dataset.id;
+        let body = {
+          text: document.querySelector('.comment-correction').value
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;"),
+        }
+        commentCorrection(body, token, id)
+          .then((responseData) => {
+            fetchAndRenderMessages();
+            // const index = correctButtonElement.dataset.index;
+            // if (messages[index].isEdit) {
+            //   const correctionText = document.querySelector('.comment-correction')
+            //   messages[index].comment = correctionText.value
+            //     .replaceAll("&", "&amp;")
+            //     .replaceAll("<", "&lt;")
+            //     .replaceAll(">", "&gt;")
+            //     .replaceAll('"', "&quot;");
+            //   messages[index].isEdit = !messages[index].isEdit;
+          })
       }
       else {
         messages[index].isEdit = !messages[index].isEdit;
+        renderMainList();
       };
-      renderMainList();
     });
   };
 };
-const initAnswersListeners = () => {
+const initAnswersListeners = (element) => {
   const answersElements = document.querySelectorAll(".comment");
   for (const answerElement of answersElements) {
     answerElement.addEventListener("click", () => {
       const index = answerElement.dataset.index;
       const quote = answerElement.querySelector(".comment-text");
-      commentInputElement.value = `QUOTE_BEGIN ${messages[index].name}: \n ${quote.innerText}, QUOTE_END \n`;
-      renderMainList();
+      element.value = `QUOTE_BEGIN ${messages[index].name}: \n ${quote.innerText}, QUOTE_END \n`;
     });
   };
 };
 
-function getCommentListMain(message, index) {
-  let like = (message.liked) ? 'like-button -active-like' : 'like-button';
-  let edit = (message.isEdit) ? `<textarea type="textarea" class="comment-correction"rows="4">${message.comment}</textarea>` : `<div class="comment-text">${message.comment.replaceAll("QUOTE_BEGIN", "<div class='quote'>").replaceAll("QUOTE_END", "</div>").replaceAll("\n", "<br>")}</div>`;
-  let correctBtn = (message.isEdit) ? `<button data-index="${index}" class="correct-button save-button">Сохранить</button>` : `<button data-index="${index}" class="correct-button">Редактировать</button>`;
-  return `<li class="comment" data-index="${index}">
-  <div class="comment-header" >
-    <div>${message.name}</div>
-    <div>${message.time}</div>
-  </div>
-  <div class="comment-body">
-    ${edit}
-  </div>
-  <div class="comment-footer">
-    ${correctBtn}
-    <div class="likes">
-      <span class="likes-counter">${message.likesCount}</span>
-      <button data-index="${index}" class="${like}"></button>
-    </div>
-  </div>
-</li>`;
-}
-
-const nameInputElement = document.getElementById("name-input");
-const commentInputElement = document.getElementById("comment-input");
-const deleteButtonElement = document.getElementById("delete-button");
-const buttonElement = document.getElementById("write-button");
-
-buttonElement.addEventListener("click", (event) => {
-  event.stopPropagation();
-  addComments();
-});
-function addComments() {
-  if (nameInputElement.value.trim() === "") {
-    nameInputElement.classList.add("input-error");
+function addComments(elem2) {
+  if (elem2.value.trim() === "") {
+    elem2.classList.add("input-error");
     return;
   }
-  if (commentInputElement.value.trim() === "") {
-    commentInputElement.classList.add("input-error");
-    return;
-  }
-  fetchPost();
+  fetchPost(elem2);
 };
-const fetchPost = () => {
+const fetchPost = (elem2) => {
+  const addFormElement = document.getElementById("addForm");
+  const loadingElement = document.querySelector(".loading");
   addFormElement.style.display = 'none';
   loadingElement.style.display = 'block';
   let postBody = {
-    name: nameInputElement.value
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;"),
+    name: user.name,
+    // userId:user.id,
     date: new Date(),
     isLiked: false,
     likes: 0,
-    text: commentInputElement.value
+    text: elem2.value
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
@@ -164,65 +164,57 @@ const fetchPost = () => {
     forceError: false,
   };
   const getAPIResponse = (response) => {
-    new Promise(() => {
-      if (response.status === 500) {
-        throw new Error("Сервер сломался");
-      }
-      if (response.status === 400) {
-        throw new Error("Плохой запрос");
-      }
+    if (response.result === "ok") {
       fetchAndRenderMessages();
-      loadingElement.style.display = 'none';
-      addFormElement.style.display = "flex";
-      deleteButtonElement.classList.add('delete-active');
-      buttonElement.setAttribute('disabled', '');
-      nameInputElement.value = "";
-      commentInputElement.value = "";
-    })
-      .catch((error) => {
-        loadingElement.style.display = 'none';
-        addFormElement.style.display = "flex";
-        if (error.message === "Сервер сломался") {
-          alert("Сервер сломался, попробуйте позже");
-          fetchPost();
-          return;
-        }
-        if (error.message === "Плохой запрос") {
-          alert("Имя и комментарий должны быть не короче трех символов");
-          nameInputElement.classList.add("input-error");
-          commentInputElement.classList.add("input-error");
-          return;
-        }
-        alert('Кажется что-то пошло не так, возможно отсутствует подключение к интернету');
-        console.warn(error);
-      });
-  };
-  postApi(postBody, getAPIResponse);
-};
-import { postApi } from "./api.js";
-
-const inputElements = document.querySelectorAll(".add-form");
-for (const inputElement of inputElements) {
-  inputElement.addEventListener('keyup', (event) => {
-    event.stopPropagation();
-    if (event.code === 'Enter') {
-      addComments();
+    }
+    else {
+      return;
     };
-  });
-  inputElement.addEventListener('input', (event) => {
+  };
+  postApi(postBody, getAPIResponse, token);
+};
+const initInputs = (elem1, elem2) => {
+  const buttonElement = document.getElementById("write-button");
+  buttonElement.addEventListener("click", (event) => {
     event.stopPropagation();
-    buttonElement.removeAttribute('disabled', '');
-    nameInputElement.classList.remove("input-error");
-    commentInputElement.classList.remove("input-error");
-  }
-  )
+    addComments(elem1, elem2);
+  });
+  const inputElements = document.querySelectorAll(".add-form");
+  for (const inputElement of inputElements) {
+    inputElement.addEventListener('input', (event) => {
+      event.stopPropagation();
+      buttonElement.removeAttribute('disabled', '');
+      inputElement.classList.remove("input-error");
+    }
+    );
+    inputElement.addEventListener('keyup', (event) => {
+      event.stopPropagation();
+      if (event.code === 'Enter') {
+        addComments(elem1, elem2);
+      };
+    });
+  };
 };
 
-deleteButtonElement.addEventListener('click', () => {
-  messages.pop();
-  deleteButtonElement.classList.remove('delete-active');
-  renderMainList();
-});
+const initDeleteButton = () => {
+  const addFormElement = document.getElementById("addForm");
+  const loadingElement = document.querySelector(".loading");
+  const deleteButtons = document.querySelectorAll(".delete");
+  for (const deleteButton of deleteButtons) {
+    deleteButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addFormElement.style.display = 'none';
+      loadingElement.style.display = 'block';
+      const id = deleteButton.dataset.id;
+      deleteComment({
+        id,
+        token,
+      }).then((responseData) => {
+        fetchAndRenderMessages();
+      });
+    });
+  };
+};
 
 function getCurrentDate(date) {
   let day = date.getDate();
@@ -234,4 +226,4 @@ function getCurrentDate(date) {
   let minute = date.getMinutes();
   if (minute < 10) minute = "0" + minute;
   return day + '.' + month + '.' + date.getFullYear() % 100 + ' ' + hour + ':' + minute;
-}
+};
