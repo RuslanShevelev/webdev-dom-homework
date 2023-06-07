@@ -2,6 +2,7 @@
 import { getAPI, postApi, deleteComment, toggleLike, commentCorrection, loginUser } from "./api.js";
 import renderMain from "./render.js";
 import { renderLoginComponent } from "./components/login-component.js";
+import { format } from "date-fns";
 
 let user = "";
 let token = "";
@@ -24,7 +25,7 @@ const getCommentDataMain = (comment) => {
     userId: comment.author.id,
     login: comment.author.login,
     name: comment.author.name,
-    time: getCurrentDate(new Date(comment.date)),
+    time: format(new Date(comment.date),'yyyy-MM-dd hh.mm.ss'),
     comment: comment.text,
     commentID: comment.id,
     likesCount: comment.likes,
@@ -216,14 +217,14 @@ const initDeleteButton = () => {
   };
 };
 
-function getCurrentDate(date) {
-  let day = date.getDate();
-  if (day < 10) day = "0" + day;
-  let month = date.getMonth() + 1;
-  if (month < 10) month = "0" + month;
-  let hour = date.getHours();
-  if (hour < 10) hour = "0" + hour;
-  let minute = date.getMinutes();
-  if (minute < 10) minute = "0" + minute;
-  return day + '.' + month + '.' + date.getFullYear() % 100 + ' ' + hour + ':' + minute;
-};
+// function getCurrentDate(date) {
+//   let day = date.getDate();
+//   if (day < 10) day = "0" + day;
+//   let month = date.getMonth() + 1;
+//   if (month < 10) month = "0" + month;
+//   let hour = date.getHours();
+//   if (hour < 10) hour = "0" + hour;
+//   let minute = date.getMinutes();
+//   if (minute < 10) minute = "0" + minute;
+//   return day + '.' + month + '.' + date.getFullYear() % 100 + ' ' + hour + ':' + minute;
+// };
