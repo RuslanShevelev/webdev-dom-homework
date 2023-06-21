@@ -7,7 +7,7 @@ export function renderLoginComponent(element, fetchAndRender) {
     <h2 class= "title">Форма ${isLoginMode ? 'входа' : 'регистрации'}</h2>
     <form class = "form" action="#">
     ${isLoginMode ? "" : '<input type="text" class="login-form-input" placeholder="Введите ваше имя" id="name" />'}
-    <input type="text" class="login-form-input" autocomplete="username"placeholder="Введите логин" id="login" />
+    <input type="text" class="login-form-input" autocomplete="username" placeholder="Введите логин" id="login" />
     <input type="password" class="login-form-input" autocomplete="current-password" placeholder="Введите пароль" id="password" />
     </form>
     <div class="login-form-row">
